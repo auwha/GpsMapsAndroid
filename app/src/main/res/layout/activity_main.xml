@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/best_provider"
+            android:layout_width="match_parent"
+            android:layout_height="35dp"
+            android:text="TextView" />
+
+        <TextView
+            android:id="@+id/longitude"
+            android:layout_width="match_parent"
+            android:layout_height="35dp"
+            android:text="TextView" />
+
+        <TextView
+            android:id="@+id/latitude"
+            android:layout_width="match_parent"
+            android:layout_height="35dp"
+            android:text="TextView" />
+
+        <org.osmdroid.views.MapView
+            android:layout_width="match_parent"
+            android:layout_height="400dp"
+            android:id="@+id/osm" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/archival_data"
+                    android:layout_width="match_parent"
+                    android:layout_height="35dp"
+                    android:text="TextView" />
+                <TextView
+                    android:id="@+id/text_network"
+                    android:layout_width="match_parent"
+                    android:layout_height="35dp"
+                    android:text="TextView" />
+                <TextView
+                    android:id="@+id/text_gps"
+                    android:layout_width="match_parent"
+                    android:layout_height="35dp"
+                    android:text="TextView" />
+            </LinearLayout>
+        </ScrollView>
+
+    </LinearLayout>
+
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
