@@ -12,6 +12,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -25,11 +26,17 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import org.osmdroid.config.Configuration;
+import org.osmdroid.views.MapController;
+import org.osmdroid.views.MapView;
+
 public class MainActivity extends AppCompatActivity implements LocationListener {
 
     private static final int ACCESS_FINE_LOCATION_PERMISSION = 1;
     private static final int ACCESS_COARSE_LOCATION_PERMISSION = 2;
     private static final String TAG = "Mar";
+    private MapView osm;
+    private MapController mapController;
     String bestProvider;
     LocationManager locationManager;
     Criteria criteria;
@@ -81,6 +88,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
             Log.d(TAG, "onCreate: " + bestProvider + location.getLongitude() + location.getLatitude());
         }
+
+        osm = findViewById(R.id.osm);
+        Context context = getApplicationContext();
+        Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context));
     }
 
     private boolean isNetworkAvailable() {
