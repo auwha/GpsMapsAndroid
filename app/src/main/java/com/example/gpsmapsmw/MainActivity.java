@@ -20,6 +20,7 @@ import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -27,11 +28,15 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import org.osmdroid.config.Configuration;
+import org.osmdroid.events.MapListener;
+import org.osmdroid.events.ScrollEvent;
+import org.osmdroid.events.ZoomEvent;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.CustomZoomButtonsController;
 import org.osmdroid.views.MapController;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.Marker;
 
 public class MainActivity extends AppCompatActivity implements LocationListener {
 
@@ -61,8 +66,16 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return insets;
         });
 
+        if (ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[2]) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
+            return;
+        }
+
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         bestProvider = locationManager.getBestProvider(criteria, true);
+        locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
 
         SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.main);
         archivalDataView = findViewById(R.id.archival_data);
@@ -97,6 +110,17 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
     }
 
+    private void addMarkerToMap(GeoPoint center) {
+        Marker marker = new Marker(osm);
+        marker.setPosition(center);
+        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+        marker.setIcon(AppCompatResources.getDrawable(this, R.drawable.baseline_my_location_24));
+        osm.getOverlays().clear();
+        osm.getOverlays().add(marker);
+        osm.invalidate();
+        marker.setTitle("My position");
+    }
+
     private void loadMap() {
         if (ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
                 || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
@@ -107,7 +131,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         Log.d(TAG, "onCreate: "+bestProvider);
         Location location = locationManager.getLastKnownLocation(bestProvider);
-        locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
         if (location != null) {
             updateInfo(location);
             archivalDataView.setText("Measurment reading:\n\n");
@@ -126,11 +149,26 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             osm.setMultiTouchControls(true);
 
             mapController = (MapController) osm.getController();
-            mapController.setZoom(12);
+            mapController.setZoom(14);
 
             GeoPoint geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
             mapController.setCenter(geoPoint);
             mapController.animateTo(geoPoint);
+
+            addMarkerToMap(geoPoint);
+            osm.addMapListener(new MapListener() {
+                @Override
+                public boolean onScroll(ScrollEvent event) {
+//                    Log.d(TAG, "onScroll: ");
+                    return false;
+                }
+
+                @Override
+                public boolean onZoom(ZoomEvent event) {
+//                    Log.d(TAG, "onZoom: ");
+                    return false;
+                }
+            });
         } else {
             Log.d(TAG, "onCreate: LOCATION IS NULL");
         }
