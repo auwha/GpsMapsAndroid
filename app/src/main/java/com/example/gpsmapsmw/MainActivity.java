@@ -27,19 +27,26 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import org.osmdroid.config.Configuration;
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
+import org.osmdroid.util.GeoPoint;
+import org.osmdroid.views.CustomZoomButtonsController;
 import org.osmdroid.views.MapController;
 import org.osmdroid.views.MapView;
 
 public class MainActivity extends AppCompatActivity implements LocationListener {
 
-    private static final int ACCESS_FINE_LOCATION_PERMISSION = 1;
-    private static final int ACCESS_COARSE_LOCATION_PERMISSION = 2;
+    private static final int PERMISSION_REQUEST_CODE = 1;
+    private static final String[] ACCESSED_PERMISSIONS = new String[] {
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.INTERNET
+    };
     private static final String TAG = "Mar";
     private MapView osm;
     private MapController mapController;
     String bestProvider;
     LocationManager locationManager;
-    Criteria criteria;
+    Criteria criteria = new Criteria();
     TextView archivalDataView;
     int amount = 0;
 
@@ -54,44 +61,79 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return insets;
         });
 
-        SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.main);
-        TextView textNetwork = findViewById(R.id.text_network);
-        TextView textGps = findViewById(R.id.text_gps);
-        swipeRefreshLayout.setOnRefreshListener(() -> {
-            swipeRefreshLayout.setRefreshing(false);
-            if (isNetworkAvailable()) {
-                textNetwork.setText("internet connected");
-                textNetwork.setTextColor(Color.GREEN);
-            } else {
-                textNetwork.setText("no internet");
-                textNetwork.setTextColor(Color.RED);
-            }
-        });
-
-        criteria = new Criteria();
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         bestProvider = locationManager.getBestProvider(criteria, true);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, ACCESS_FINE_LOCATION_PERMISSION);
-            requestPermissions(new String[] {Manifest.permission.ACCESS_COARSE_LOCATION}, ACCESS_COARSE_LOCATION_PERMISSION);
+
+        SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.main);
+        archivalDataView = findViewById(R.id.archival_data);
+        swipeRefreshLayout.setOnRefreshListener(() -> {
+            swipeRefreshLayout.setRefreshing(false);
+            checkGpsAndInternetConnection();
+            loadMap();
+        });
+
+        checkGpsAndInternetConnection();
+        loadMap();
+    }
+
+    private void checkGpsAndInternetConnection() {
+        TextView textNetwork = findViewById(R.id.text_network);
+        TextView textGps = findViewById(R.id.text_gps);
+
+        if (isNetworkAvailable()) {
+            textNetwork.setText("internet connected");
+            textNetwork.setTextColor(Color.GREEN);
+        } else {
+            textNetwork.setText("no internet");
+            textNetwork.setTextColor(Color.RED);
+        }
+
+        if (locationManager.isLocationEnabled() && locationManager.isProviderEnabled(bestProvider)) {
+            textGps.setText("gps enabled");
+            textGps.setTextColor(Color.GREEN);
+        } else {
+            textGps.setText("no gps");
+            textGps.setTextColor(Color.RED);
+        }
+    }
+
+    private void loadMap() {
+        if (ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[2]) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
             return;
         }
 
+        Log.d(TAG, "onCreate: "+bestProvider);
         Location location = locationManager.getLastKnownLocation(bestProvider);
+        locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
         if (location != null) {
             updateInfo(location);
-            archivalDataView = findViewById(R.id.archival_data);
             archivalDataView.setText("Measurment reading:\n\n");
 
             locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
 
             Log.d(TAG, "onCreate: " + bestProvider + location.getLongitude() + location.getLatitude());
-        }
 
-        osm = findViewById(R.id.osm);
-        Context context = getApplicationContext();
-        Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context));
+
+            osm = findViewById(R.id.osm);
+            Context context = getApplicationContext();
+            Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context));
+
+            osm.setTileSource(TileSourceFactory.MAPNIK);
+            osm.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
+            osm.setMultiTouchControls(true);
+
+            mapController = (MapController) osm.getController();
+            mapController.setZoom(12);
+
+            GeoPoint geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+            mapController.setCenter(geoPoint);
+            mapController.animateTo(geoPoint);
+        } else {
+            Log.d(TAG, "onCreate: LOCATION IS NULL");
+        }
     }
 
     private boolean isNetworkAvailable() {
@@ -105,33 +147,42 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != PERMISSION_REQUEST_CODE) {
+            return;
+        }
 
-        switch (requestCode) {
-            case ACCESS_FINE_LOCATION_PERMISSION:
-                if ((permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_FINE_LOCATION) && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
-                    Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                    Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was granted", Toast.LENGTH_SHORT).show();
-                    this.recreate();
-                } else {
-                    Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                    Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was denied", Toast.LENGTH_SHORT).show();
-                    return;
-                }
+        if (permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_FINE_LOCATION)) {
 
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was granted", Toast.LENGTH_SHORT).show();
+                this.recreate();
+            } else {
+                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was denied", Toast.LENGTH_SHORT).show();
+            }
 
-                break;
-            case ACCESS_COARSE_LOCATION_PERMISSION:
-                if ((permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_COARSE_LOCATION) && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
-                    Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                    Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was granted", Toast.LENGTH_SHORT).show();
-                    this.recreate();
-                } else {
-                    Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                    Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was denied", Toast.LENGTH_SHORT).show();
-                    return;
-                }
+        } else if (permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_COARSE_LOCATION)) {
 
-                break;
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was granted", Toast.LENGTH_SHORT).show();
+                this.recreate();
+            } else {
+                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was denied", Toast.LENGTH_SHORT).show();
+            }
+
+        } else if (permissions[0].equalsIgnoreCase(Manifest.permission.INTERNET)) {
+
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Toast.makeText(this, "Permission INTERNET was granted", Toast.LENGTH_SHORT).show();
+                this.recreate();
+            } else {
+                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Toast.makeText(this, "Permission INTERNET was denied", Toast.LENGTH_SHORT).show();
+            }
 
         }
     }
@@ -140,7 +191,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     public void onLocationChanged(@NonNull Location location) {
         bestProvider = locationManager.getBestProvider(criteria, true);
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
 
