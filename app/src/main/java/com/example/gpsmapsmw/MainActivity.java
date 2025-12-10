@@ -3,6 +3,7 @@ package com.example.gpsmapsmw;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.location.Criteria;
 import android.location.Location;
@@ -14,6 +15,7 @@ import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -75,9 +77,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         bestProvider = locationManager.getBestProvider(criteria, true);
-        locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
+        locationManager.requestLocationUpdates(bestProvider, 500, 0.1f, this);
 
-        SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.main);
+        SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.swipe_refresh_layout);
         archivalDataView = findViewById(R.id.archival_data);
         swipeRefreshLayout.setOnRefreshListener(() -> {
             swipeRefreshLayout.setRefreshing(false);
@@ -90,23 +92,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private void checkGpsAndInternetConnection() {
-        TextView textNetwork = findViewById(R.id.text_network);
-        TextView textGps = findViewById(R.id.text_gps);
+        ImageView networkIcon = findViewById(R.id.network_icon);
+        ImageView gpsIcon = findViewById(R.id.gps_icon);
 
         if (isNetworkAvailable()) {
-            textNetwork.setText("internet connected");
-            textNetwork.setTextColor(Color.GREEN);
+            networkIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.green)));
         } else {
-            textNetwork.setText("no internet");
-            textNetwork.setTextColor(Color.RED);
+            networkIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.red)));
         }
 
         if (locationManager.isLocationEnabled() && locationManager.isProviderEnabled(bestProvider)) {
-            textGps.setText("gps enabled");
-            textGps.setTextColor(Color.GREEN);
+            gpsIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.green)));
         } else {
-            textGps.setText("no gps");
-            textGps.setTextColor(Color.RED);
+            gpsIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.red)));
         }
     }
 
@@ -129,7 +127,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return;
         }
 
-        Log.d(TAG, "onCreate: "+bestProvider);
+        Log.v(TAG, "onCreate: "+bestProvider);
         Location location = locationManager.getLastKnownLocation(bestProvider);
         if (location != null) {
             updateInfo(location);
@@ -137,7 +135,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
             locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
 
-            Log.d(TAG, "onCreate: " + bestProvider + location.getLongitude() + location.getLatitude());
+            Log.v(TAG, "onCreate: " + bestProvider + location.getLongitude() + location.getLatitude());
 
 
             osm = findViewById(R.id.osm);
@@ -170,7 +168,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 }
             });
         } else {
-            Log.d(TAG, "onCreate: LOCATION IS NULL");
+            Log.v(TAG, "onCreate: LOCATION IS NULL");
         }
     }
 
@@ -192,33 +190,33 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         if (permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_FINE_LOCATION)) {
 
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
                 Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was granted", Toast.LENGTH_SHORT).show();
                 this.recreate();
             } else {
-                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
                 Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was denied", Toast.LENGTH_SHORT).show();
             }
 
         } else if (permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_COARSE_LOCATION)) {
 
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
                 Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was granted", Toast.LENGTH_SHORT).show();
                 this.recreate();
             } else {
-                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
                 Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was denied", Toast.LENGTH_SHORT).show();
             }
 
         } else if (permissions[0].equalsIgnoreCase(Manifest.permission.INTERNET)) {
 
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
                 Toast.makeText(this, "Permission INTERNET was granted", Toast.LENGTH_SHORT).show();
                 this.recreate();
             } else {
-                Log.d(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
                 Toast.makeText(this, "Permission INTERNET was denied", Toast.LENGTH_SHORT).show();
             }
 
@@ -236,9 +234,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         location = locationManager.getLastKnownLocation(bestProvider);
         if (location != null) {
             updateInfo(location);
-            archivalDataView.setText(archivalDataView.getText() + " " + location.getLongitude() + " : " + location.getLatitude() + "\n");
+            archivalDataView.setText(String.format("%s %f : %f \n", archivalDataView.getText(), location.getLongitude(), location.getLatitude()));
             amount++;
-            Log.d(TAG, "onLocationChanged: " + amount + "pomiar:" + bestProvider + location.getLongitude() + location.getLatitude());
+            Log.v(TAG, String.format("onLocationChanged: Pomiar: %d | %s | %f : %f", amount, bestProvider, location.getLongitude(), location.getLatitude()));
         }
     }
 
