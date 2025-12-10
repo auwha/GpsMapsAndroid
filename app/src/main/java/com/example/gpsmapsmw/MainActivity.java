@@ -1,35 +1,30 @@
 package com.example.gpsmapsmw;
 
+import static java.lang.String.format;
+
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
-import android.graphics.Color;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
-import android.net.Network;
 import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.telephony.SmsManager;
 import android.util.Log;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.app.ActivityCompat;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-
-import com.google.android.material.appbar.MaterialToolbar;
 
 import org.osmdroid.config.Configuration;
 import org.osmdroid.events.MapListener;
@@ -42,36 +37,36 @@ import org.osmdroid.views.MapController;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 
+import java.util.Locale;
+
 public class MainActivity extends Toolbar implements LocationListener {
 
-    private static final int PERMISSION_REQUEST_CODE = 1;
-    private static final String[] ACCESSED_PERMISSIONS = new String[] {
+    public static final int PERMISSION_REQUEST_CODE = 1;
+    public static final String[] ACCESSED_PERMISSIONS = new String[] {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.INTERNET
+            Manifest.permission.INTERNET,
+            Manifest.permission.SEND_SMS
     };
     private static final String TAG = "Mar";
     private MapView osm;
-    private MapController mapController;
     String bestProvider;
     LocationManager locationManager;
     Criteria criteria = new Criteria();
     TextView archivalDataView;
     int amount = 0;
 
+    @SuppressLint("MissingPermission")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        if (ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[2]) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
-            return;
-        };
-
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         bestProvider = locationManager.getBestProvider(criteria, true);
+
+        if (bestProvider == null)
+            return;
+
         locationManager.requestLocationUpdates(bestProvider, 500, 0.1f, this);
 
         SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.swipe_refresh_layout);
@@ -141,7 +136,7 @@ public class MainActivity extends Toolbar implements LocationListener {
             osm.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
             osm.setMultiTouchControls(true);
 
-            mapController = (MapController) osm.getController();
+            MapController mapController = (MapController) osm.getController();
             mapController.setZoom(14);
 
             GeoPoint geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
@@ -182,40 +177,9 @@ public class MainActivity extends Toolbar implements LocationListener {
             return;
         }
 
-        if (permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_FINE_LOCATION)) {
-
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was granted", Toast.LENGTH_SHORT).show();
-                this.recreate();
-            } else {
-                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                Toast.makeText(this, "Permission ACCESS_FINE_LOCATION was denied", Toast.LENGTH_SHORT).show();
-            }
-
-        } else if (permissions[0].equalsIgnoreCase(Manifest.permission.ACCESS_COARSE_LOCATION)) {
-
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was granted", Toast.LENGTH_SHORT).show();
-                this.recreate();
-            } else {
-                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                Toast.makeText(this, "Permission ACCESS_COARSE_LOCATION was denied", Toast.LENGTH_SHORT).show();
-            }
-
-        } else if (permissions[0].equalsIgnoreCase(Manifest.permission.INTERNET)) {
-
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                Toast.makeText(this, "Permission INTERNET was granted", Toast.LENGTH_SHORT).show();
-                this.recreate();
-            } else {
-                Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-                Toast.makeText(this, "Permission INTERNET was denied", Toast.LENGTH_SHORT).show();
-            }
-
-        }
+        Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
+        if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
+            this.recreate();
     }
 
     @Override
@@ -228,20 +192,48 @@ public class MainActivity extends Toolbar implements LocationListener {
 
         location = locationManager.getLastKnownLocation(bestProvider);
         if (location != null) {
-            updateInfo(location);
-            archivalDataView.setText(String.format("%s %f : %f \n", archivalDataView.getText(), location.getLongitude(), location.getLatitude()));
+            String locationInfo = updateInfo(location);
+            archivalDataView.setText(format(Locale.ENGLISH,"%s %s\n", archivalDataView.getText(), locationInfo));
             amount++;
-            Log.v(TAG, String.format("onLocationChanged: Pomiar: %d | %s | %f : %f", amount, bestProvider, location.getLongitude(), location.getLatitude()));
+            Log.v(TAG, format("onLocationChanged: Pomiar: %d | %s | %s", amount, bestProvider, locationInfo));
         }
     }
 
-    private void updateInfo(Location location) {
+    private String updateInfo(Location location) {
         TextView bestProviderView = findViewById(R.id.best_provider);
         TextView longitudeView = findViewById(R.id.longitude);
         TextView latitudeView = findViewById(R.id.latitude);
 
+        double longitude = location.getLongitude();
+        double latitude = location.getLatitude();
+
         bestProviderView.setText("Best provider: " + bestProvider);
-        longitudeView.setText("Longitude: " + location.getLongitude());
-        latitudeView.setText("Latitude: " + location.getLatitude());
+        longitudeView.setText("Longitude: " + longitude);
+        latitudeView.setText("Latitude: " + latitude);
+        return format(Locale.ENGLISH, "%f : %f", longitude, latitude);
+    }
+
+    @SuppressLint("MissingPermission")
+    @Override
+    protected void sendSMS(String phoneNumber) {
+        Location location = locationManager.getLastKnownLocation(bestProvider);
+        if (location == null) {
+            Toast.makeText(getApplicationContext(), "Location is null", Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "sendSMS: Location is null");
+            return;
+        }
+        if (phoneNumber.isEmpty()) {
+            Toast.makeText(getApplicationContext(), "Text must not be empty", Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "sendSMS: Text empty");
+            return;
+        }
+        
+        String messageText = updateInfo(location);
+
+        SmsManager smsManager = SmsManager.getDefault();
+        smsManager.sendTextMessage(phoneNumber, null, messageText, null, null);
+
+        Toast.makeText(getApplicationContext(), "SMS sent", Toast.LENGTH_SHORT).show();
+        Log.d(TAG, "sendSMS: SMS sent");
     }
 }
