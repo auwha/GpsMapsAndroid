@@ -6,6 +6,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -16,7 +17,6 @@ import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.preference.PreferenceManager;
@@ -127,7 +127,7 @@ public class MainActivity extends Toolbar implements LocationListener {
         Log.v(TAG, "onCreate: "+bestProvider);
         Location location = locationManager.getLastKnownLocation(bestProvider);
         if (location != null) {
-            updateInfo(location);
+            getLatestInfo(location);
             archivalDataView.setText("Measurment reading:\n\n");
 
             locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
@@ -199,14 +199,14 @@ public class MainActivity extends Toolbar implements LocationListener {
 
         location = locationManager.getLastKnownLocation(bestProvider);
         if (location != null) {
-            String locationInfo = updateInfo(location);
+            String locationInfo = getLatestInfo(location);
             archivalDataView.setText(format(Locale.ENGLISH,"%s %s\n", archivalDataView.getText(), locationInfo));
             amount++;
             Log.v(TAG, format("onLocationChanged: Pomiar: %d | %s | %s", amount, bestProvider, locationInfo));
         }
     }
 
-    private String updateInfo(Location location) {
+    private String getLatestInfo(Location location) {
         TextView bestProviderView = findViewById(R.id.best_provider);
         TextView longitudeView = findViewById(R.id.longitude);
         TextView latitudeView = findViewById(R.id.latitude);
@@ -235,7 +235,7 @@ public class MainActivity extends Toolbar implements LocationListener {
             return;
         }
 
-        String messageText = updateInfo(location);
+        String messageText = getLatestInfo(location);
         SmsManager smsManager = SmsManager.getDefault();
         smsManager.sendTextMessage(phoneNumber, null, messageText, null, null);
 
@@ -269,6 +269,29 @@ public class MainActivity extends Toolbar implements LocationListener {
         } catch (Exception e) {
             Log.e(TAG, "błąd zapisu", e);
             Toast.makeText(this, "Błąd zapisywania zrzutu", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    @Override
+    protected void shareInfo() {
+        Location location = locationManager.getLastKnownLocation(bestProvider);
+        if (location == null) {
+            Toast.makeText(getApplicationContext(), "Location is null", Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "shareInfo: Location is null");
+            return;
+        }
+
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+
+        String messageText = getLatestInfo(location);
+        intent.putExtra(Intent.EXTRA_TEXT, messageText);
+
+        try {
+            startActivity(intent);
+        } catch (android.content.ActivityNotFoundException e) {
+            Log.d(TAG, "sendSmsWithIntent: "+e);
         }
     }
 }

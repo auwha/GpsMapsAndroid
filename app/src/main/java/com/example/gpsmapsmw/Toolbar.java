@@ -68,6 +68,7 @@ public abstract class Toolbar extends AppCompatActivity {
             saveMap();
         } else if (itemId == R.id.share_results) {
             Toast.makeText(this, "Udostępnianie wyników...", Toast.LENGTH_SHORT).show();
+            shareInfo();
         } else if (itemId == R.id.show_weather) {
             Toast.makeText(this, "Wyświetlanie pogody...", Toast.LENGTH_SHORT).show();
         }
@@ -91,4 +92,5 @@ public abstract class Toolbar extends AppCompatActivity {
 
     protected abstract void sendSMS(String phoneNumber);
     protected abstract void saveMap();
+    protected abstract void shareInfo();
 }
