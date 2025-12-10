@@ -18,6 +18,7 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.telephony.SmsManager;
 import android.util.Log;
@@ -29,6 +30,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import org.osmdroid.config.Configuration;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.CustomZoomButtonsController;
@@ -132,6 +134,7 @@ public class MainActivity extends Toolbar implements LocationListener {
         Log.v(TAG, format("loadMap: %s | %s", bestProvider, formatLocationData(location)));
 
         mapView = findViewById(R.id.osm);
+        Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
         mapView.setTileSource(TileSourceFactory.MAPNIK);
         mapView.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
         mapView.setMultiTouchControls(true);
