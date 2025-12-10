@@ -4,17 +4,23 @@ import static java.lang.String.format;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.preference.PreferenceManager;
+import android.provider.MediaStore;
 import android.telephony.SmsManager;
 import android.util.Log;
 import android.widget.ImageView;
@@ -37,6 +43,7 @@ import org.osmdroid.views.MapController;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 
+import java.io.OutputStream;
 import java.util.Locale;
 
 public class MainActivity extends Toolbar implements LocationListener {
@@ -227,13 +234,41 @@ public class MainActivity extends Toolbar implements LocationListener {
             Log.d(TAG, "sendSMS: Text empty");
             return;
         }
-        
-        String messageText = updateInfo(location);
 
+        String messageText = updateInfo(location);
         SmsManager smsManager = SmsManager.getDefault();
         smsManager.sendTextMessage(phoneNumber, null, messageText, null, null);
 
         Toast.makeText(getApplicationContext(), "SMS sent", Toast.LENGTH_SHORT).show();
         Log.d(TAG, "sendSMS: SMS sent");
+    }
+
+    @Override
+    protected void saveMap() {
+        osm.setDrawingCacheEnabled(true);
+        Bitmap mapBitmap = Bitmap.createBitmap(osm.getDrawingCache());
+        osm.setDrawingCacheEnabled(false);
+
+        try {
+            String fileName = "map_" + System.currentTimeMillis() + ".png";
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
+            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+
+            if (uri != null) {
+                try (OutputStream outputStream = getContentResolver().openOutputStream(uri)) {
+                    if (outputStream != null) {
+                        mapBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
+                        Toast.makeText(this, "Zrzut mapy zapisany", Toast.LENGTH_SHORT).show();
+                        Log.d(TAG, "Zrzut mapy zapisany w: " + uri);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "błąd zapisu", e);
+            Toast.makeText(this, "Błąd zapisywania zrzutu", Toast.LENGTH_SHORT).show();
+        }
     }
 }

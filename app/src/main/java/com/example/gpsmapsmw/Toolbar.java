@@ -65,6 +65,7 @@ public abstract class Toolbar extends AppCompatActivity {
             showTextInputDialog();
         } else if (itemId == R.id.save_coords_menu) {
             Toast.makeText(this, "Zapisywanie koordynatów...", Toast.LENGTH_SHORT).show();
+            saveMap();
         } else if (itemId == R.id.share_results) {
             Toast.makeText(this, "Udostępnianie wyników...", Toast.LENGTH_SHORT).show();
         } else if (itemId == R.id.show_weather) {
@@ -89,4 +90,5 @@ public abstract class Toolbar extends AppCompatActivity {
     }
 
     protected abstract void sendSMS(String phoneNumber);
+    protected abstract void saveMap();
 }
