@@ -5,12 +5,12 @@
         android:title="Wyślij koordynaty"
         app:showAsAction="never" />
     <item android:id="@+id/save_coords_menu"
-        android:title="Zapisz koordynaty"
+        android:title="Zapisz mapę"
         app:showAsAction="never" />
     <item android:id="@+id/share_results"
-        android:title="Udostępnij wyniki"
+        android:title="Udostępnij koordynaty"
         app:showAsAction="never" />
     <item android:id="@+id/show_weather"
-        android:title="Pogoda"
+        android:title="Pogoda (brak)"
         app:showAsAction="never" />
 </menu>

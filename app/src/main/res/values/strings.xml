@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">GpsMapsMW</string>
+    <string name="zapis_lokalizacji">Zapis lokalizacji:\n\n</string>
+    <string name="najlepszy_dostawca">Najlepszy dostawca:</string>
+    <string name="longitude">Długość geograficzna:</string>
+    <string name="latitude">Szerokość geograficzna:</string>
 </resources>

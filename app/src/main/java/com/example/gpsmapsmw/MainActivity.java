@@ -7,7 +7,6 @@ import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.location.Criteria;
@@ -19,7 +18,6 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
-import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.telephony.SmsManager;
 import android.util.Log;
@@ -29,13 +27,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.content.res.AppCompatResources;
-import androidx.core.app.ActivityCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
-import org.osmdroid.config.Configuration;
-import org.osmdroid.events.MapListener;
-import org.osmdroid.events.ScrollEvent;
-import org.osmdroid.events.ZoomEvent;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.CustomZoomButtonsController;
@@ -44,10 +37,10 @@ import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 
 import java.io.OutputStream;
-import java.util.Locale;
+import java.util.Objects;
 
 public class MainActivity extends Toolbar implements LocationListener {
-
+    public static final String TAG = "Mar";
     public static final int PERMISSION_REQUEST_CODE = 1;
     public static final String[] ACCESSED_PERMISSIONS = new String[] {
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -55,199 +48,157 @@ public class MainActivity extends Toolbar implements LocationListener {
             Manifest.permission.INTERNET,
             Manifest.permission.SEND_SMS
     };
-    private static final String TAG = "Mar";
-    private MapView osm;
-    String bestProvider;
+    private MapView mapView;
     LocationManager locationManager;
-    Criteria criteria = new Criteria();
-    TextView archivalDataView;
-    int amount = 0;
+    String bestProvider;
+    int locationUpdateCount = 0;
+
+    @SuppressLint("MissingPermission")
+    private Location getLocation() {
+        if (hasNoPermissions())
+            return null;
+        return locationManager.getLastKnownLocation(bestProvider);
+    }
 
     @SuppressLint("MissingPermission")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        bestProvider = locationManager.getBestProvider(criteria, true);
-
-        if (bestProvider == null)
+        if (hasNoPermissions()) {
+            Toast.makeText(this, "Aplikacja nie będzie działać bez uprawnień!", Toast.LENGTH_SHORT).show();
             return;
+        }
 
-        locationManager.requestLocationUpdates(bestProvider, 500, 0.1f, this);
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+
+        Criteria criteria = new Criteria();
+        String provider = locationManager.getBestProvider(criteria, true);
+        bestProvider = Objects.requireNonNullElse(provider, LocationManager.GPS_PROVIDER);
+
+        locationManager.requestLocationUpdates(bestProvider, 500, 0.3f, this);
 
         SwipeRefreshLayout swipeRefreshLayout = findViewById(R.id.swipe_refresh_layout);
-        archivalDataView = findViewById(R.id.archival_data);
         swipeRefreshLayout.setOnRefreshListener(() -> {
             swipeRefreshLayout.setRefreshing(false);
-            checkGpsAndInternetConnection();
+            updateStatusIcons();
             loadMap();
         });
 
-        checkGpsAndInternetConnection();
+        updateStatusIcons();
         loadMap();
     }
 
-    private void checkGpsAndInternetConnection() {
+    @Override
+    public void onLocationChanged(@NonNull Location location) {
+        if (hasNoPermissions())
+            return;
+
+        updateLocationData(location);
+        Log.v(TAG, format("Pomiar: %d | %s | %s", ++locationUpdateCount, bestProvider, formatLocationData(location)));
+    }
+
+    private void updateStatusIcons() {
         ImageView networkIcon = findViewById(R.id.network_icon);
         ImageView gpsIcon = findViewById(R.id.gps_icon);
 
-        if (isNetworkAvailable()) {
-            networkIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.green)));
-        } else {
-            networkIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.red)));
-        }
+        int colorNetwork = isNetworkAvailable() ? getColor(R.color.green) : getColor(R.color.red);
+        int colorGPS = isGPSAvailable() ? getColor(R.color.green) : getColor(R.color.red);
 
-        if (locationManager.isLocationEnabled() && locationManager.isProviderEnabled(bestProvider)) {
-            gpsIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.green)));
-        } else {
-            gpsIcon.setImageTintList(ColorStateList.valueOf(getColor(R.color.red)));
-        }
+        networkIcon.setImageTintList(ColorStateList.valueOf(colorNetwork));
+        gpsIcon.setImageTintList(ColorStateList.valueOf(colorGPS));
     }
-
-    private void addMarkerToMap(GeoPoint center) {
-        Marker marker = new Marker(osm);
-        marker.setPosition(center);
-        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
-        marker.setIcon(AppCompatResources.getDrawable(this, R.drawable.baseline_my_location_24));
-        osm.getOverlays().clear();
-        osm.getOverlays().add(marker);
-        osm.invalidate();
-        marker.setTitle("My position");
-    }
-
-    private void loadMap() {
-        if (ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[2]) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
-            return;
-        }
-
-        Log.v(TAG, "onCreate: "+bestProvider);
-        Location location = locationManager.getLastKnownLocation(bestProvider);
-        if (location != null) {
-            getLatestInfo(location);
-            archivalDataView.setText("Measurment reading:\n\n");
-
-            locationManager.requestLocationUpdates(bestProvider, 500, 0.5f, this);
-
-            Log.v(TAG, "onCreate: " + bestProvider + location.getLongitude() + location.getLatitude());
-
-
-            osm = findViewById(R.id.osm);
-            Context context = getApplicationContext();
-            Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context));
-
-            osm.setTileSource(TileSourceFactory.MAPNIK);
-            osm.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
-            osm.setMultiTouchControls(true);
-
-            MapController mapController = (MapController) osm.getController();
-            mapController.setZoom(14);
-
-            GeoPoint geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-            mapController.setCenter(geoPoint);
-            mapController.animateTo(geoPoint);
-
-            addMarkerToMap(geoPoint);
-            osm.addMapListener(new MapListener() {
-                @Override
-                public boolean onScroll(ScrollEvent event) {
-//                    Log.d(TAG, "onScroll: ");
-                    return false;
-                }
-
-                @Override
-                public boolean onZoom(ZoomEvent event) {
-//                    Log.d(TAG, "onZoom: ");
-                    return false;
-                }
-            });
-        } else {
-            Log.v(TAG, "onCreate: LOCATION IS NULL");
-        }
-    }
-
     private boolean isNetworkAvailable() {
         ConnectivityManager connectivityManager
                 = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo activeNetworkInfo = connectivityManager != null ? connectivityManager.getActiveNetworkInfo() : null;
         return activeNetworkInfo != null && activeNetworkInfo.isConnected();
     }
-
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != PERMISSION_REQUEST_CODE) {
-            return;
-        }
-
-        Log.v(TAG, "onRequestPermissionsResult: "+requestCode+permissions[0]+grantResults[0]);
-        if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
-            this.recreate();
+    private boolean isGPSAvailable() {
+        return locationManager.isLocationEnabled() && locationManager.isProviderEnabled(bestProvider);
     }
 
-    @Override
-    public void onLocationChanged(@NonNull Location location) {
-        bestProvider = locationManager.getBestProvider(criteria, true);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-
-        location = locationManager.getLastKnownLocation(bestProvider);
-        if (location != null) {
-            String locationInfo = getLatestInfo(location);
-            archivalDataView.setText(format(Locale.ENGLISH,"%s %s\n", archivalDataView.getText(), locationInfo));
-            amount++;
-            Log.v(TAG, format("onLocationChanged: Pomiar: %d | %s | %s", amount, bestProvider, locationInfo));
-        }
-    }
-
-    private String getLatestInfo(Location location) {
-        TextView bestProviderView = findViewById(R.id.best_provider);
-        TextView longitudeView = findViewById(R.id.longitude);
-        TextView latitudeView = findViewById(R.id.latitude);
-
-        double longitude = location.getLongitude();
-        double latitude = location.getLatitude();
-
-        bestProviderView.setText("Best provider: " + bestProvider);
-        longitudeView.setText("Longitude: " + longitude);
-        latitudeView.setText("Latitude: " + latitude);
-        return format(Locale.ENGLISH, "%f : %f", longitude, latitude);
-    }
-
-    @SuppressLint("MissingPermission")
-    @Override
-    protected void sendSMS(String phoneNumber) {
-        Location location = locationManager.getLastKnownLocation(bestProvider);
+    private void loadMap() {
+        Location location = getLocation();
         if (location == null) {
-            Toast.makeText(getApplicationContext(), "Location is null", Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "sendSMS: Location is null");
+            Log.v(TAG, "loadMap: LOCATION IS NULL");
             return;
         }
+
+        TextView archivalDataText = findViewById(R.id.archival_data);
+        archivalDataText.setText(getText(R.string.zapis_lokalizacji));
+        updateLocationData(location);
+
+        Log.v(TAG, format("loadMap: %s | %s", bestProvider, formatLocationData(location)));
+
+        mapView = findViewById(R.id.osm);
+        mapView.setTileSource(TileSourceFactory.MAPNIK);
+        mapView.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
+        mapView.setMultiTouchControls(true);
+
+        MapController mapController = (MapController) mapView.getController();
+        mapController.setZoom(14);
+
+        GeoPoint geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+        mapController.setCenter(geoPoint);
+        mapController.animateTo(geoPoint);
+        addMarkerToMap(geoPoint);
+    }
+    private void addMarkerToMap(GeoPoint center) {
+        Marker marker = new Marker(mapView);
+        marker.setPosition(center);
+        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+        marker.setIcon(AppCompatResources.getDrawable(this, R.drawable.baseline_my_location_24));
+        mapView.getOverlays().clear();
+        mapView.getOverlays().add(marker);
+        mapView.invalidate();
+        marker.setTitle("My position");
+    }
+
+    private String formatLocationData(Location location) {
+        if (location == null) {
+            Toast.makeText(getApplicationContext(), "Brak lokalizacji", Toast.LENGTH_SHORT).show();
+            return "Location is unavailable";
+        }
+
+        return format("%s : %s", location.getLongitude(), location.getLatitude());
+    }
+
+    private void updateLocationData(Location location) {
+        TextView bestProviderText = findViewById(R.id.best_provider);
+        TextView longitudeText = findViewById(R.id.longitude);
+        TextView latitudeText = findViewById(R.id.latitude);
+        TextView archivalDataText = findViewById(R.id.archival_data);
+
+        bestProviderText.setText(format("%s %s", getText(R.string.najlepszy_dostawca), bestProvider));
+        longitudeText.setText(format("%s %s", getText(R.string.longitude), location.getLongitude()));
+        latitudeText.setText(format("%s %s", getText(R.string.latitude), location.getLatitude()));
+        archivalDataText.setText(format("%s %s\n", archivalDataText.getText(), formatLocationData(location)));
+    }
+
+    @Override
+    protected void sendLocationSMS(String phoneNumber) {
+        if (hasNoPermissions())
+            return;
+
         if (phoneNumber.isEmpty()) {
-            Toast.makeText(getApplicationContext(), "Text must not be empty", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Musisz podać numer telefonu", Toast.LENGTH_SHORT).show();
             Log.d(TAG, "sendSMS: Text empty");
             return;
         }
 
-        String messageText = getLatestInfo(location);
         SmsManager smsManager = SmsManager.getDefault();
-        smsManager.sendTextMessage(phoneNumber, null, messageText, null, null);
+        smsManager.sendTextMessage(phoneNumber, null, formatLocationData(getLocation()), null, null);
 
-        Toast.makeText(getApplicationContext(), "SMS sent", Toast.LENGTH_SHORT).show();
-        Log.d(TAG, "sendSMS: SMS sent");
+        Toast.makeText(this, "Wysłano SMS", Toast.LENGTH_SHORT).show();
+        Log.v(TAG, "sendSMS: SMS sent");
     }
 
     @Override
-    protected void saveMap() {
-        osm.setDrawingCacheEnabled(true);
-        Bitmap mapBitmap = Bitmap.createBitmap(osm.getDrawingCache());
-        osm.setDrawingCacheEnabled(false);
+    protected void saveMapRender() {
+        mapView.setDrawingCacheEnabled(true);
+        Bitmap mapBitmap = Bitmap.createBitmap(mapView.getDrawingCache());
+        mapView.setDrawingCacheEnabled(false);
 
         try {
             String fileName = "map_" + System.currentTimeMillis() + ".png";
@@ -262,36 +213,26 @@ public class MainActivity extends Toolbar implements LocationListener {
                     if (outputStream != null) {
                         mapBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
                         Toast.makeText(this, "Zrzut mapy zapisany", Toast.LENGTH_SHORT).show();
-                        Log.d(TAG, "Zrzut mapy zapisany w: " + uri);
+                        Log.v(TAG, "saveMapRender: image saved: " + uri);
                     }
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "błąd zapisu", e);
             Toast.makeText(this, "Błąd zapisywania zrzutu", Toast.LENGTH_SHORT).show();
+            Log.v(TAG, "saveMapRender: saving error", e);
         }
     }
 
-    @SuppressLint("MissingPermission")
     @Override
-    protected void shareInfo() {
-        Location location = locationManager.getLastKnownLocation(bestProvider);
-        if (location == null) {
-            Toast.makeText(getApplicationContext(), "Location is null", Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "shareInfo: Location is null");
-            return;
-        }
-
+    protected void shareLocationData() {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-
-        String messageText = getLatestInfo(location);
-        intent.putExtra(Intent.EXTRA_TEXT, messageText);
+        intent.putExtra(Intent.EXTRA_TEXT, formatLocationData(getLocation()));
 
         try {
             startActivity(intent);
         } catch (android.content.ActivityNotFoundException e) {
-            Log.d(TAG, "sendSmsWithIntent: "+e);
+            Log.v(TAG, "shareLocationData: "+e);
         }
     }
 }

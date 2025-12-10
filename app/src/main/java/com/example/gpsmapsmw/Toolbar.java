@@ -3,12 +3,10 @@ package com.example.gpsmapsmw;
 import static com.example.gpsmapsmw.MainActivity.ACCESSED_PERMISSIONS;
 import static com.example.gpsmapsmw.MainActivity.PERMISSION_REQUEST_CODE;
 
-import android.Manifest;
-import android.content.DialogInterface;
+import static java.lang.String.format;
+
 import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Bundle;
-import android.telephony.SmsManager;
 import android.text.InputType;
 import android.util.Log;
 import android.view.Menu;
@@ -26,8 +24,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.appbar.MaterialToolbar;
-
 public abstract class Toolbar extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -40,13 +36,8 @@ public abstract class Toolbar extends AppCompatActivity {
             return insets;
         });
 
-        if (ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[2]) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, ACCESSED_PERMISSIONS[3]) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
+        if (hasNoPermissions())
             return;
-        };
 
         setSupportActionBar(findViewById(R.id.toolbar));
     }
@@ -65,10 +56,10 @@ public abstract class Toolbar extends AppCompatActivity {
             showTextInputDialog();
         } else if (itemId == R.id.save_coords_menu) {
             Toast.makeText(this, "Zapisywanie koordynatów...", Toast.LENGTH_SHORT).show();
-            saveMap();
+            saveMapRender();
         } else if (itemId == R.id.share_results) {
             Toast.makeText(this, "Udostępnianie wyników...", Toast.LENGTH_SHORT).show();
-            shareInfo();
+            shareLocationData();
         } else if (itemId == R.id.show_weather) {
             Toast.makeText(this, "Wyświetlanie pogody...", Toast.LENGTH_SHORT).show();
         }
@@ -85,12 +76,35 @@ public abstract class Toolbar extends AppCompatActivity {
                 .setView(input)
                 .setPositiveButton("OK", (dialog, which) -> {
                     String userInput = input.getText().toString();
-                    sendSMS(userInput);
+                    sendLocationSMS(userInput);
                 });
         builder.show();
     }
 
-    protected abstract void sendSMS(String phoneNumber);
-    protected abstract void saveMap();
-    protected abstract void shareInfo();
+    protected abstract void sendLocationSMS(String phoneNumber);
+    protected abstract void saveMapRender();
+    protected abstract void shareLocationData();
+
+    protected boolean hasNoPermissions() {
+        if (ActivityCompat.checkSelfPermission(getApplicationContext(), ACCESSED_PERMISSIONS[0]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(getApplicationContext(), ACCESSED_PERMISSIONS[1]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(getApplicationContext(), ACCESSED_PERMISSIONS[2]) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(getApplicationContext(), ACCESSED_PERMISSIONS[3]) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != PERMISSION_REQUEST_CODE || permissions.length < 1 || grantResults.length < 1) {
+            return;
+        }
+
+        Log.v(MainActivity.TAG, format("onRequestPermissionsResult: %d | %s | %d", requestCode, permissions[0], grantResults[0]));
+        if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
+            this.recreate();
+    }
 }
