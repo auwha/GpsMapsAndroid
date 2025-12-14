@@ -7,6 +7,7 @@ import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.location.Criteria;
@@ -22,26 +23,34 @@ import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.telephony.SmsManager;
 import android.util.Log;
-import android.widget.ImageView;
-import android.widget.TextView;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.app.ActivityCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
+import com.example.gpsmapsmw.databinding.ActivityMainBinding;
 
 import org.osmdroid.config.Configuration;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.CustomZoomButtonsController;
 import org.osmdroid.views.MapController;
-import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 
 import java.io.OutputStream;
-import java.util.Objects;
 
-public class MainActivity extends Toolbar implements LocationListener {
+public class MainActivity extends AppCompatActivity implements LocationListener {
     public static final String TAG = "Mar";
     public static final int PERMISSION_REQUEST_CODE = 1;
     public static final String[] ACCESSED_PERMISSIONS = new String[] {
@@ -50,22 +59,27 @@ public class MainActivity extends Toolbar implements LocationListener {
             Manifest.permission.INTERNET,
             Manifest.permission.SEND_SMS
     };
-    private MapView mapView;
-    LocationManager locationManager;
-    String bestProvider;
-    int locationUpdateCount = 0;
+    private ActivityMainBinding b;
 
-    @SuppressLint("MissingPermission")
-    private Location getLocation() {
-        if (hasNoPermissions())
-            return null;
-        return locationManager.getLastKnownLocation(bestProvider);
-    }
+    private LocationManager locationManager;
+    private Marker positionMarker;
+    private String bestProvider;
+    private int locationUpdateCount = 0;
 
     @SuppressLint("MissingPermission")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        b = ActivityMainBinding.inflate(getLayoutInflater());
+
+        setContentView(b.getRoot());
+        ViewCompat.setOnApplyWindowInsetsListener(b.main, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
+
+        setSupportActionBar(b.toolbar);
 
         if (hasNoPermissions()) {
             Toast.makeText(this, "Aplikacja nie będzie działać bez uprawnień!", Toast.LENGTH_SHORT).show();
@@ -76,7 +90,7 @@ public class MainActivity extends Toolbar implements LocationListener {
 
         Criteria criteria = new Criteria();
         String provider = locationManager.getBestProvider(criteria, true);
-        bestProvider = Objects.requireNonNullElse(provider, LocationManager.GPS_PROVIDER);
+        bestProvider = (provider != null) ? provider : LocationManager.GPS_PROVIDER;
 
         locationManager.requestLocationUpdates(bestProvider, 500, 0.3f, this);
 
@@ -84,127 +98,123 @@ public class MainActivity extends Toolbar implements LocationListener {
         swipeRefreshLayout.setOnRefreshListener(() -> {
             swipeRefreshLayout.setRefreshing(false);
             updateStatusIcons();
-            loadMap();
+            loadMapView();
         });
 
         updateStatusIcons();
-        loadMap();
+        loadMapView();
+    }
+
+    private void loadMapView() {
+        Location location = getLocation();
+        if (location == null) {
+            Log.v(TAG, "loadMapView: LOCATION IS NULL");
+            Toast.makeText(this, "Brak lokalizacji", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        b.archivalDataText.setText(getText(R.string.zapis_lokalizacji));
+        updateLocationData(location);
+
+        double latitude = location.getLatitude();
+        double longitude = location.getLongitude();
+
+        Log.v(TAG, format("loadMapView: %s | %s : %s", bestProvider, latitude, longitude));
+
+        Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
+        b.mapView.setTileSource(TileSourceFactory.MAPNIK);
+        b.mapView.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
+        b.mapView.setMultiTouchControls(true);
+
+        MapController mapController = (MapController) b.mapView.getController();
+        mapController.setZoom(14);
+
+        GeoPoint position = new GeoPoint(latitude, longitude);
+        mapController.setCenter(position);
+        mapController.animateTo(position);
+
+        updateOrCreateMarker(position);
+    }
+    private void updateOrCreateMarker(GeoPoint position) {
+        if (positionMarker == null) {
+            positionMarker = new Marker(b.mapView);
+            positionMarker.setTitle("Moja pozycja");
+            positionMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+            positionMarker.setIcon(AppCompatResources.getDrawable(this, R.drawable.baseline_my_location_24));
+            b.mapView.getOverlays().add(positionMarker);
+        }
+        positionMarker.setPosition(position);
+        b.mapView.invalidate();
     }
 
     @Override
     public void onLocationChanged(@NonNull Location location) {
-        if (hasNoPermissions())
-            return;
+        double latitude = location.getLatitude();
+        double longitude = location.getLongitude();
+
+        GeoPoint newPosition = new GeoPoint(latitude, longitude);
+        updateOrCreateMarker(newPosition);
 
         updateLocationData(location);
-        Log.v(TAG, format("Pomiar: %d | %s | %s", ++locationUpdateCount, bestProvider, formatLocationData(location)));
+        Log.v(TAG, format("Pomiar: %d | %s | %s : %s", ++locationUpdateCount, bestProvider, latitude, longitude));
     }
-
     private void updateStatusIcons() {
-        ImageView networkIcon = findViewById(R.id.network_icon);
-        ImageView gpsIcon = findViewById(R.id.gps_icon);
-
-        int colorNetwork = isNetworkAvailable() ? getColor(R.color.green) : getColor(R.color.red);
-        int colorGPS = isGPSAvailable() ? getColor(R.color.green) : getColor(R.color.red);
-
-        networkIcon.setImageTintList(ColorStateList.valueOf(colorNetwork));
-        gpsIcon.setImageTintList(ColorStateList.valueOf(colorGPS));
+        b.networkIcon.setImageTintList(ColorStateList.valueOf(
+                isNetworkAvailable() ? getColor(R.color.green) : getColor(R.color.red)
+        ));
+        b.gpsIcon.setImageTintList(ColorStateList.valueOf(
+                isGPSAvailable() ? getColor(R.color.green) : getColor(R.color.red)
+        ));
     }
-    private boolean isNetworkAvailable() {
-        ConnectivityManager connectivityManager
-                = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo activeNetworkInfo = connectivityManager != null ? connectivityManager.getActiveNetworkInfo() : null;
-        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
-    }
-    private boolean isGPSAvailable() {
-        return locationManager.isLocationEnabled() && locationManager.isProviderEnabled(bestProvider);
-    }
-
-    private void loadMap() {
-        Location location = getLocation();
-        if (location == null) {
-            Log.v(TAG, "loadMap: LOCATION IS NULL");
-            return;
-        }
-
-        TextView archivalDataText = findViewById(R.id.archival_data);
-        archivalDataText.setText(getText(R.string.zapis_lokalizacji));
-        updateLocationData(location);
-
-        Log.v(TAG, format("loadMap: %s | %s", bestProvider, formatLocationData(location)));
-
-        mapView = findViewById(R.id.osm);
-        Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
-        mapView.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.ALWAYS);
-        mapView.setMultiTouchControls(true);
-
-        MapController mapController = (MapController) mapView.getController();
-        mapController.setZoom(14);
-
-        GeoPoint geoPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-        mapController.setCenter(geoPoint);
-        mapController.animateTo(geoPoint);
-        addMarkerToMap(geoPoint);
-    }
-    private void addMarkerToMap(GeoPoint center) {
-        Marker marker = new Marker(mapView);
-        marker.setPosition(center);
-        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
-        marker.setIcon(AppCompatResources.getDrawable(this, R.drawable.baseline_my_location_24));
-        mapView.getOverlays().clear();
-        mapView.getOverlays().add(marker);
-        mapView.invalidate();
-        marker.setTitle("My position");
-    }
-
-    private String formatLocationData(Location location) {
-        if (location == null) {
-            Toast.makeText(getApplicationContext(), "Brak lokalizacji", Toast.LENGTH_SHORT).show();
-            return "Location is unavailable";
-        }
-
-        return format("%s : %s", location.getLongitude(), location.getLatitude());
-    }
-
     private void updateLocationData(Location location) {
-        TextView bestProviderText = findViewById(R.id.best_provider);
-        TextView longitudeText = findViewById(R.id.longitude);
-        TextView latitudeText = findViewById(R.id.latitude);
-        TextView archivalDataText = findViewById(R.id.archival_data);
-
-        bestProviderText.setText(format("%s %s", getText(R.string.najlepszy_dostawca), bestProvider));
-        longitudeText.setText(format("%s %s", getText(R.string.longitude), location.getLongitude()));
-        latitudeText.setText(format("%s %s", getText(R.string.latitude), location.getLatitude()));
-        archivalDataText.setText(format("%s %s\n", archivalDataText.getText(), formatLocationData(location)));
+        b.bestProviderText.setText(format("%s %s", getText(R.string.najlepszy_dostawca), bestProvider));
+        b.longitudeText.setText(format("%s %s", getText(R.string.longitude), location.getLongitude()));
+        b.latitudeText.setText(format("%s %s", getText(R.string.latitude), location.getLatitude()));
+        b.archivalDataText.append(format("%s : %s\n", location.getLatitude(), location.getLongitude()));
     }
 
     @Override
-    protected void sendLocationSMS(String phoneNumber) {
-        if (hasNoPermissions())
-            return;
-
-        if (phoneNumber.isEmpty()) {
-            Toast.makeText(this, "Musisz podać numer telefonu", Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "sendSMS: Text empty");
-            return;
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.my_menu, menu);
+        return true;
+    }
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        int itemId = item.getItemId();
+        if (itemId == R.id.send_sms_menu) {
+            showSMSDialog();
+            return true;
+        } else if (itemId == R.id.save_coords_menu) {
+            menuSaveMapImage();
+            return true;
+        } else if (itemId == R.id.share_results) {
+            Toast.makeText(this, "Udostępnianie lokalizacji...", Toast.LENGTH_SHORT).show();
+            menuShareLocation();
+            return true;
+        } else if (itemId == R.id.show_weather) {
+            startActivity(new Intent(this, WeatherActivity.class));
+            return true;
         }
-
-        SmsManager smsManager = SmsManager.getDefault();
-        smsManager.sendTextMessage(phoneNumber, null, formatLocationData(getLocation()), null, null);
-
-        Toast.makeText(this, "Wysłano SMS", Toast.LENGTH_SHORT).show();
-        Log.v(TAG, "sendSMS: SMS sent");
+        return super.onOptionsItemSelected(item);
     }
+    protected void menuSendLocationSMS(String phoneNumber) {
+        Location location = getLocation();
+        if (location != null) {
+            String text = format("%s : %s", location.getLatitude(), location.getLongitude());
+            SmsManager smsManager = SmsManager.getDefault();
+            smsManager.sendTextMessage(phoneNumber, null, text, null, null);
 
-    @Override
-    protected void saveMapRender() {
-        mapView.setDrawingCacheEnabled(true);
-        Bitmap mapBitmap = Bitmap.createBitmap(mapView.getDrawingCache());
-        mapView.setDrawingCacheEnabled(false);
+            Toast.makeText(this, "Wysłano SMS", Toast.LENGTH_SHORT).show();
+            Log.v(TAG, "sendSMS: SMS sent");
+        }
+    }
+    protected void menuSaveMapImage() {
+        b.mapView.setDrawingCacheEnabled(true);
+        Bitmap mapBitmap = Bitmap.createBitmap(b.mapView.getDrawingCache());
+        b.mapView.setDrawingCacheEnabled(false);
 
         try {
-            String fileName = "map_" + System.currentTimeMillis() + ".png";
+            String fileName = format("map_%s.png", System.currentTimeMillis());
             ContentValues values = new ContentValues();
             values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
@@ -216,26 +226,86 @@ public class MainActivity extends Toolbar implements LocationListener {
                     if (outputStream != null) {
                         mapBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
                         Toast.makeText(this, "Zrzut mapy zapisany", Toast.LENGTH_SHORT).show();
-                        Log.v(TAG, "saveMapRender: image saved: " + uri);
+                        Log.v(TAG, "menuSaveMapImage: image saved: " + uri);
                     }
                 }
             }
         } catch (Exception e) {
             Toast.makeText(this, "Błąd zapisywania zrzutu", Toast.LENGTH_SHORT).show();
-            Log.v(TAG, "saveMapRender: saving error", e);
+            Log.v(TAG, "menuSaveMapImage: saving error", e);
         }
+    }
+    protected void menuShareLocation() {
+        Location location = getLocation();
+        if (location == null) {
+            Toast.makeText(this, "Brak lokalizacji", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String text = format("%s : %s", location.getLatitude(), location.getLongitude());
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, text);
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Lokalizacja");
+
+        startActivity(Intent.createChooser(intent, "Udostępnij przez..."));
+    }
+    private void showSMSDialog() {
+        View view = getLayoutInflater().inflate(R.layout.dialog, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle("Wyślij do...")
+                .setView(view)
+                .setPositiveButton("Wyślij", (dialog, which) -> {
+                    EditText input = view.findViewById(R.id.phone_input);
+                    String phoneNumber = input.getText().toString();
+                    if (phoneNumber.isEmpty()) {
+                        Toast.makeText(this, "Musisz podać numer telefonu", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    menuSendLocationSMS(phoneNumber);
+                });
+        builder.show();
+    }
+
+    @SuppressLint("MissingPermission")
+    private Location getLocation() {
+        if (hasNoPermissions())
+            return null;
+        return locationManager.getLastKnownLocation(bestProvider);
+    }
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager
+                = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager != null ? connectivityManager.getActiveNetworkInfo() : null;
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+    }
+    private boolean isGPSAvailable() {
+        return locationManager.isLocationEnabled() && locationManager.isProviderEnabled(bestProvider);
+    }
+
+    private boolean hasNoPermissions() {
+        for (String permission : ACCESSED_PERMISSIONS) {
+            if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(ACCESSED_PERMISSIONS, PERMISSION_REQUEST_CODE);
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
-    protected void shareLocationData() {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_TEXT, formatLocationData(getLocation()));
-
-        try {
-            startActivity(intent);
-        } catch (android.content.ActivityNotFoundException e) {
-            Log.v(TAG, "shareLocationData: "+e);
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != PERMISSION_REQUEST_CODE || permissions.length < 1 || grantResults.length < 1) {
+            return;
         }
+
+        for(int i = 0; i < permissions.length; i++) {
+            Log.v(MainActivity.TAG, format("onRequestPermissionsResult: %d | %s | %d", requestCode, permissions[i], grantResults[i]));
+            if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+        }
+        this.recreate();
     }
 }

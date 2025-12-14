@@ -2,15 +2,15 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item android:id="@+id/send_sms_menu"
-        android:title="Wyślij koordynaty"
+        android:title="@string/wyslij_koordynaty"
         app:showAsAction="never" />
     <item android:id="@+id/save_coords_menu"
-        android:title="Zapisz mapę"
+        android:title="@string/zapisz_mape"
         app:showAsAction="never" />
     <item android:id="@+id/share_results"
-        android:title="Udostępnij koordynaty"
+        android:title="@string/udostepnij_koordynaty"
         app:showAsAction="never" />
     <item android:id="@+id/show_weather"
-        android:title="Pogoda (brak)"
+        android:title="@string/pogoda"
         app:showAsAction="never" />
 </menu>

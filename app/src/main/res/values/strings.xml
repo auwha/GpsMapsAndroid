@@ -4,4 +4,14 @@
     <string name="najlepszy_dostawca">Najlepszy dostawca:</string>
     <string name="longitude">Długość geograficzna:</string>
     <string name="latitude">Szerokość geograficzna:</string>
+    <string name="wyslij_koordynaty">Wyślij koordynaty</string>
+    <string name="zapisz_mape">Zapisz mapę</string>
+    <string name="udostepnij_koordynaty">Udostępnij koordynaty</string>
+    <string name="pogoda">Pogoda</string>
+    <string name="lokalizacja">Toruń, PL</string>
+    <string name="ladowanie">Ładowanie...</string>
+    <string name="numer_telefonu">Numer telefonu</string>
+    <string name="network_enabled">is network enabled</string>
+    <string name="gps_enabled">is gps enabled</string>
+    <string name="weather_description">weather description image</string>
 </resources>
